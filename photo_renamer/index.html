@@ -34,7 +34,11 @@
       <div class="f" id="key-row" style="display:none">
         <label>API 키</label>
         <input type="password" id="api-key" placeholder="선택한 제공사의 API 키" autocomplete="off">
-        <label class="chk"><input type="checkbox" id="save-key" checked> 이 브라우저에 키 저장 (localStorage — 외부 전송 없음)</label>
+        <label class="chk"><input type="checkbox" id="save-key"> 이 브라우저에 저장 (localStorage — 브라우저를 닫아도 유지)</label>
+        <button type="button" class="mini" id="del-key">키 삭제</button>
+        <p class="hint key-warn">⚠ 키는 브라우저에 <b>평문 저장</b>되며 사진과 함께 <b>외부 API로 직접 전송</b>됩니다 —
+          개인 발급 키만, 신뢰된 PC에서만 사용하세요. 기본은 세션 저장(브라우저 종료 시 삭제)이며,
+          팀/실서비스 배포 시에는 서버측 프록시로 키를 옮겨야 합니다(README 참고).</p>
       </div>
       <div class="f" id="model-row" style="display:none">
         <label>모델</label>

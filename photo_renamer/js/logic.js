@@ -227,18 +227,20 @@
   }
 
   /* ---------- CSV / 스크립트 내보내기 ---------- */
+  function csvCell(s) { return '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"'; }
   function planToCsv(plan) {
     var rows = ["원본 파일명,새 파일명,품번,브랜드"];
     plan.forEach(function (p) {
-      rows.push('"' + p.oldName + '","' + p.newName + '","' + p.part + '","' + p.brand + '"');
+      rows.push([p.oldName, p.newName, p.part, p.brand].map(csvCell).join(","));
     });
     return "﻿" + rows.join("\r\n"); // BOM: 엑셀 한글 호환
   }
 
+  function batEsc(s) { return String(s == null ? "" : s).replace(/%/g, "%%"); } // 배치 변수 확장 방지
   function planToBat(plan) {
     var lines = ["@echo off", "chcp 65001 >nul", "rem 부품 사진 일괄 이름 변경 — 사진 폴더에 두고 실행"];
     plan.forEach(function (p) {
-      if (p.oldName !== p.newName) lines.push('ren "' + p.oldName + '" "' + p.newName + '"');
+      if (p.oldName !== p.newName) lines.push('ren "' + batEsc(p.oldName) + '" "' + batEsc(p.newName) + '"');
     });
     lines.push("echo 완료 & pause");
     return lines.join("\r\n");
