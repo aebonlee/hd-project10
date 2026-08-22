@@ -18,13 +18,30 @@
     });
   }
 
-  /* ---------- 설정 (localStorage) ---------- */
+  /* ---------- 설정 (localStorage) ----------
+   * API 키 저장: 기본은 sessionStorage(브라우저 종료 시 삭제),
+   * [이 브라우저에 저장] 체크 시에만 localStorage에 평문 보관 (기존 저장 키와 호환) */
   var SETTINGS_KEY = "pr_settings_v1";
+  var SESSION_KEYS = "pr_keys_session_v1";
   function loadSettings() {
     try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch (e) { return {}; }
   }
   function saveSettings(s) {
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* 무시 */ }
+  }
+  function loadSessionKeys() {
+    try { return JSON.parse(sessionStorage.getItem(SESSION_KEYS)) || {}; } catch (e) { return {}; }
+  }
+  function saveSessionKeys(k) {
+    try { sessionStorage.setItem(SESSION_KEYS, JSON.stringify(k)); } catch (e) { /* 무시 */ }
+  }
+  /** 엔진별 저장 키 조회 — localStorage(영구 저장)이면 persisted:true */
+  function storedKey(eng) {
+    var s = loadSettings();
+    if (s.keys && s.keys[eng]) return { key: s.keys[eng], persisted: true };
+    var sess = loadSessionKeys();
+    if (sess[eng]) return { key: sess[eng], persisted: false };
+    return null;
   }
   function currentEngine() { return $("engine").value; }
   function apiKey() { return $("api-key").value.trim(); }
@@ -32,21 +49,36 @@
   function initSettings() {
     var s = loadSettings();
     if (s.engine) $("engine").value = s.engine;
-    if (s.keys && s.keys[$("engine").value]) $("api-key").value = s.keys[$("engine").value];
     if (s.brands) $("brand-list").value = s.brands;
     else $("brand-list").value = L.DEFAULT_BRANDS.join("\n");
+    onEngineChange(); // 모델 select 옵션을 먼저 채운 뒤 저장된 모델을 복원
     if (s.model) $("ai-model").value = s.model;
-    onEngineChange();
     renderBrandDatalist();
   }
   function persistSettings() {
     var s = loadSettings();
     s.engine = currentEngine();
     s.keys = s.keys || {};
-    if ($("save-key").checked && apiKey()) s.keys[currentEngine()] = apiKey();
+    var eng = currentEngine(), key = apiKey();
+    var sess = loadSessionKeys();
+    if (key) {
+      if ($("save-key").checked) { s.keys[eng] = key; delete sess[eng]; }
+      else { sess[eng] = key; delete s.keys[eng]; }
+      saveSessionKeys(sess);
+    }
     s.brands = $("brand-list").value;
     s.model = $("ai-model").value;
     saveSettings(s);
+  }
+  function deleteKey() {
+    var eng = currentEngine();
+    var s = loadSettings();
+    if (s.keys) { delete s.keys[eng]; saveSettings(s); }
+    var sess = loadSessionKeys();
+    delete sess[eng];
+    saveSessionKeys(sess);
+    $("api-key").value = "";
+    $("save-key").checked = false;
   }
   function brands() {
     return $("brand-list").value.split(/\n+/).map(function (b) { return b.trim(); }).filter(Boolean);
@@ -69,8 +101,9 @@
     $("ai-model").innerHTML = MODEL_OPTIONS[eng].map(function (o) {
       return "<option value=\"" + o[0] + "\">" + esc(o[1]) + "</option>";
     }).join("");
-    var s = loadSettings();
-    if (s.keys && s.keys[eng]) $("api-key").value = s.keys[eng]; else $("api-key").value = "";
+    var sk = storedKey(eng);
+    $("api-key").value = sk ? sk.key : "";
+    $("save-key").checked = !!(sk && sk.persisted);
     $("engine-hint").textContent = {
       tesseract: "무료·브라우저 내 처리(사진이 외부로 전송되지 않음). 인쇄 품질에 따라 오독 가능 — 검수 화면에서 수정하세요.",
       claude: "Anthropic API 키 필요. 사진을 Anthropic API로 전송해 판독합니다. 정확도가 가장 높습니다.",
@@ -83,6 +116,7 @@
   function addFiles(entries) {
     // entries: [{name, file, handle|null}]
     entries.sort(function (a, b) { return L.naturalCompare(a.name, b.name); });
+    state.photos.forEach(function (p) { try { URL.revokeObjectURL(p.thumbUrl); } catch (e) { /* 무시 */ } });
     state.photos = entries.map(function (e) {
       return { name: e.name, file: e.file, handle: e.handle || null, thumbUrl: URL.createObjectURL(e.file), ocr: null };
     });
@@ -275,25 +309,58 @@
 
   function applyInFolder(plan) {
     var log = [];
+    function writeFile(name, buf) {
+      return state.dirHandle.getFileHandle(name, { create: true }).then(function (nh) {
+        return nh.createWritable().then(function (w) {
+          return w.write(buf).then(function () { return w.close(); });
+        });
+      });
+    }
+
+    var changes = plan.filter(function (p) {
+      if (p.oldName === p.newName) { log.push("= " + p.oldName + " (변경 없음)"); return false; }
+      return !!state.photos[p.index].handle;
+    });
+    // 새 이름이 다른 사진의 현재 이름과 겹치는 경우(연번 이동·재실행 등),
+    // 그 이름을 갖고 있는 파일을 먼저 비켜 두지 않으면 덮어써서 사진이 유실된다.
+    var targetSet = {};
+    changes.forEach(function (p) { targetSet[p.newName] = true; });
+
     var chain = Promise.resolve();
-    plan.forEach(function (p) {
+    // 1단계: 다른 파일이 차지할 이름을 현재 갖고 있는 파일을 임시 이름으로 이동(또는 내용 확보 후 삭제)
+    changes.forEach(function (p, i) {
+      if (!targetSet[p.oldName]) return;
       chain = chain.then(function () {
-        if (p.oldName === p.newName) { log.push("= " + p.oldName + " (변경 없음)"); return; }
         var photo = state.photos[p.index];
-        if (!photo.handle) return;
-        // move 지원 시 rename, 아니면 복사 후 원본 삭제
         if (typeof photo.handle.move === "function") {
-          return photo.handle.move(p.newName).then(function () { log.push("✔ " + p.oldName + " → " + p.newName); });
+          return photo.handle.move("__renaming_" + i + "__" + p.newName);
         }
-        return state.dirHandle.getFileHandle(p.newName, { create: true }).then(function (nh) {
-          return nh.createWritable().then(function (w) {
-            return photo.file.arrayBuffer().then(function (buf) { return w.write(buf).then(function () { return w.close(); }); });
-          });
+        // move 미지원: 내용을 미리 읽어 두고 원본을 지워 이름을 비운다
+        return photo.file.arrayBuffer().then(function (buf) {
+          p._buf = buf;
+          return state.dirHandle.removeEntry(p.oldName);
+        });
+      }).catch(function (e) { p._err = String(e.message || e); });
+    });
+
+    // 2단계: 최종 이름으로 변경
+    changes.forEach(function (p) {
+      chain = chain.then(function () {
+        if (p._err) { log.push("✖ " + p.oldName + ": " + p._err); return; }
+        var photo = state.photos[p.index];
+        function done() { photo.name = p.newName; log.push("✔ " + p.oldName + " → " + p.newName); }
+        if (p._buf) return writeFile(p.newName, p._buf).then(done);
+        if (typeof photo.handle.move === "function") {
+          return photo.handle.move(p.newName).then(done);
+        }
+        return photo.file.arrayBuffer().then(function (buf) {
+          return writeFile(p.newName, buf);
         }).then(function () {
           return state.dirHandle.removeEntry(p.oldName);
-        }).then(function () { log.push("✔ " + p.oldName + " → " + p.newName); });
+        }).then(done);
       }).catch(function (e) { log.push("✖ " + p.oldName + ": " + String(e.message || e)); });
     });
+
     chain.then(function () {
       $("apply-log").textContent = log.join("\n") + "\n\n총 " + plan.length + "건 처리 완료.";
       $("apply-log").style.display = "";
@@ -330,6 +397,7 @@
 
   /* ---------- 초기화 ---------- */
   $("engine").addEventListener("change", onEngineChange);
+  $("del-key").addEventListener("click", deleteKey);
   $("brand-list").addEventListener("change", function () { persistSettings(); renderBrandDatalist(); });
   initSettings();
 })();

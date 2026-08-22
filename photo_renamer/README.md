@@ -21,7 +21,7 @@
 1. **인식 엔진 선택**
    - `기본 OCR` (무료): 브라우저 안에서 처리 — **사진이 외부로 전송되지 않음**
    - `Claude` / `ChatGPT` / `Solar(Upstage)`: 각 서비스의 API 키 입력 시 사용. 정확도가 높음 (사진이 해당 API로 전송됨)
-   - API 키는 이 브라우저의 localStorage에만 저장되며, 해당 제공사 API 호출 외에는 어디에도 전송되지 않습니다
+   - API 키는 기본적으로 **세션 저장**(sessionStorage — 브라우저 종료 시 삭제)이며, [이 브라우저에 저장]을 체크한 경우에만 localStorage에 보관됩니다. [키 삭제] 버튼으로 언제든 제거할 수 있습니다 (아래 "API 키 보안 주의" 참고)
 2. **사진 불러오기**
    - `폴더 선택` (크롬/엣지): 완료 시 폴더 안 실제 파일명이 바로 변경됨
    - `사진 선택`: 새 이름의 사본을 ZIP으로 다운로드, 또는 `.bat` 스크립트로 원본 PC에서 일괄 변경
@@ -50,6 +50,16 @@
 | Claude (Anthropic) | API 사용량 | Anthropic API | 최고 | 모델 선택: Opus 5(기본)/Sonnet 5/Haiku 4.5 |
 | ChatGPT (OpenAI) | API 사용량 | OpenAI API | 높음 | GPT-4o(기본)/4o-mini |
 | Solar (Upstage) | API 사용량 | Upstage API | 높음(인쇄체) | Document OCR 텍스트 추출 후 규칙 매칭 |
+
+## API 키 보안 주의
+
+- AI 비전/고정밀 OCR 엔진은 **브라우저에서 각 제공사 API를 직접 호출**합니다
+  (Anthropic 호출에는 `anthropic-dangerous-direct-browser-access` 헤더를 사용). 서버를 거치지 않으므로:
+  - 키가 브라우저에 **평문으로 저장**되고, 네트워크 요청에 그대로 실립니다 → **개인 발급 키만, 신뢰된 PC에서만** 사용하세요
+  - 기본 저장은 sessionStorage(브라우저 종료 시 삭제), [이 브라우저에 저장] 체크 시 localStorage(영구). [키 삭제]로 즉시 제거 가능
+- **팀 공용 배포·실서비스에는 이 방식을 쓰면 안 됩니다.** 키를 서버(프록시)에 두고
+  브라우저 → 자체 서버 → 제공사 API 로 중계하는 구조로 바꿔야 합니다.
+  교체 지점은 `js/ocr.js`의 어댑터 함수 — fetch URL을 자체 프록시 엔드포인트로 바꾸고 키 헤더를 서버에서 붙이면 됩니다.
 
 ## 실행/배포
 

@@ -3,7 +3,8 @@
  *  - text 반환 엔진(Tesseract/Upstage OCR): 이후 logic.js 규칙으로 품번·브랜드 추출
  *  - 구조화 반환 엔진(Claude/OpenAI 비전): part/brand 직접 반환
  *
- * API 키는 사용자의 브라우저 localStorage에만 저장되며, 해당 제공사 API 호출에만 사용됩니다.
+ * API 키는 사용자의 브라우저에만 저장(기본 sessionStorage, 선택 시 localStorage)되며,
+ * 해당 제공사 API 호출에만 사용됩니다. 브라우저에서 API를 직접 호출하므로 개인 키·신뢰된 PC 전용입니다.
  */
 (function (root) {
   "use strict";

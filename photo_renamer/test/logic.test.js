@@ -70,4 +70,9 @@ assert.ok(csv.indexOf("원본 파일명,새 파일명") !== -1);
 const bat = L.planToBat(plan);
 assert.ok(bat.indexOf('ren "IMG_1.jpg" "012_15KA-72040_(HYUNDAI).jpg"') !== -1);
 
+// CSV/BAT 특수문자 이스케이프: 원본 파일명의 큰따옴표(CSV)·%(배치 변수 확장) 처리
+const oddPlan = [{ index: 0, oldName: 'a"b%1.jpg', newName: "001_15KA-72040_(HYUNDAI).jpg", part: "15KA-72040", brand: "HYUNDAI", group: 0 }];
+assert.ok(L.planToCsv(oddPlan).indexOf('"a""b%1.jpg"') !== -1, "CSV 큰따옴표 이중화");
+assert.ok(L.planToBat(oddPlan).indexOf('a"b%%1.jpg') !== -1, "BAT % 이스케이프");
+
 console.log("✅ logic.test.js — 모든 테스트 통과");
