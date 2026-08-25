@@ -2,6 +2,10 @@
 
 > 🌐 **배포 페이지: [https://aebonlee.github.io/hd-project10/](https://aebonlee.github.io/hd-project10/)** · 저장소: https://github.com/aebonlee/hd-project10
 
+> 🗄️ **Supabase 를 붙이려면 → [`SUPABASE-설정.md`](SUPABASE-설정.md)**
+> 데이터베이스는 **수강생 본인 계정**에 만듭니다. 계정 만들기부터 확인까지 단계별로 적어 두었습니다.
+
+
 HD건설기계 AMPS기획팀(기획: 홍재영) — 현장 부품 사진의 파일명을 **AI 판독 → 검수 → 일괄 적용**으로 자동 변경하는 도구입니다.
 
 - 파일명 규칙: `연번3자리_품번_(브랜드).JPG` (예: `003_31LM-10310_(HYUNDAI).JPG`), 새 부품 전까지 품번·브랜드 자동 이어받기
