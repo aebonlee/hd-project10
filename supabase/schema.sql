@@ -129,7 +129,14 @@ create trigger job_sync before insert or update on public.job
 -- 3. 뷰
 -- ----------------------------------------------------------------------------
 
-create or replace view public.job_view as
+
+-- ⚠ 뷰에는 `with (security_invoker = true)` 를 붙인다.
+--   붙이지 않으면 뷰는 **만든 사람(postgres)의 권한**으로 돌아, 뷰를 읽을 수 있는
+--   사람이 밑에 깔린 표의 RLS 를 통째로 지나친다. 표만 잠그고 뷰를 안 잠그면 헛일이다.
+--   (hd-project03 에서 실제로 남의 업체 실사 결과가 뷰로 그대로 보였다.
+--    tests/server.test.js 의 "업체는 보고서 뷰로도 남의 자료를 볼 수 없다" 가 잡는다)
+--   security_invoker 는 PostgreSQL 15 부터. Supabase 는 15 이상이다.
+create or replace view public.job_view with (security_invoker = true) as
 select j.*,
        (select count(*) from public.rename_item r where r.job_id = j.id)                    as items,
        (select count(*) from public.rename_item r where r.job_id = j.id and r.confirmed)    as confirmed_items,
@@ -140,7 +147,7 @@ select j.*,
 from public.job j;
 
 -- 사람이 봐야 하는 것 — 확신이 낮거나 값이 빈 행
-create or replace view public.review_queue as
+create or replace view public.review_queue with (security_invoker = true) as
 select r.*, j.label as job_label
 from public.rename_item r
 join public.job j on j.id = r.job_id
@@ -148,7 +155,7 @@ where not r.confirmed
   and (r.part_no is null or r.brand is null or coalesce(r.confidence, 0) < 0.7);
 
 -- 검수하며 고친 브랜드 표기 — 사전에 넣을 후보
-create or replace view public.brand_candidates as
+create or replace view public.brand_candidates with (security_invoker = true) as
 select brand as canonical, count(*) as hits
 from public.rename_item
 where confirmed and brand is not null
